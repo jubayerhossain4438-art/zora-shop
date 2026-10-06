@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ZORA Admin Panel</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f5f5f7;
+      color: #111827;
+    }
+
+    .login,
+    .admin {
+      max-width: 1100px;
+      margin: 40px auto;
+      padding: 20px;
+    }
+
+    .login {
+      max-width: 420px;
+    }
+
+    .card {
+      background: white;
+      padding: 25px;
+      border-radius: 18px;
+      box-shadow: 0 8px 30px rgba(0,0,0,.08);
+    }
+
+    h1 {
+      margin-top: 0;
+    }
+
+    input,
+    select {
+      width: 100%;
+      padding: 13px;
+      margin: 7px 0 14px;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      font-size: 15px;
+    }
+
+    button {
+      border: 0;
+      padding: 11px 17px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .primary {
+      background: #6d28d9;
+      color: white;
+    }
+
+    .danger {
+      background: #dc2626;
+      color: white;
+    }
+
+    .secondary {
+      background: #e5e7eb;
+      color: #111827;
+    }
+
+    .top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 15px;
+      margin-bottom: 25px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+
+    .products {
+      margin-top: 25px;
+    }
+
+    .product {
+      background: white;
+      padding: 18px;
+      border-radius: 14px;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 20px;
+      box-shadow: 0 3px 15px rgba(0,0,0,.05);
+    }
+
+    .product-info h3 {
+      margin: 0 0 6px;
+    }
+
+    .product-info p {
+      margin: 4px 0;
+      color: #666;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .message {
+      padding: 12px;
+      margin: 10px 0;
+      border-radius: 10px;
+      background: #f3f4f6;
+    }
+
+    #adminPanel {
+      display: none;
+    }
+
+    @media(max-width:700px) {
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .product {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .top {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+<!-- LOGIN -->
+<div id="loginBox" class="login">
+  <div class="card">
+    <h1>🛍️ ZORA Admin</h1>
+    <p>Login to manage your products.</p>
+
+    <input id="email" type="email" placeholder="Admin email">
+    <input id="password" type="password" placeholder="Password">
+
+    <button class="primary" onclick="login()" style="width:100%;">
+      Login
+    </button>
+
+    <div id="loginMessage"></div>
+  </div>
+</div>
+
+
+<!-- ADMIN PANEL -->
+<div id="adminPanel" class="admin">
+
+  <div class="top">
+    <div>
+      <h1>🛍️ ZORA Admin Panel</h1>
+      <p>Manage your store products.</p>
+    </div>
+
+    <button class="danger" onclick="logout()">
+      Logout
+    </button>
+  </div>
+
+
+  <!-- ADD / EDIT PRODUCT -->
+  <div class="card">
+
+    <h2 id="formTitle">➕ Add Product</h2>
+
+    <input type="hidden" id="productId">
+
+    <div class="form-grid">
+
+      <div>
+        <label>Product Name</label>
+        <input id="name" placeholder="Product name">
+      </div>
+
+      <div>
+        <label>Category</label>
+        <select id="category">
+          <option value="Clothing">Clothing</option>
+          <option value="Electronics">Electronics</option>
+          <option value="Crafts">Crafts</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+
+      <div>
+        <label>Price</label>
+        <input id="price" type="number" placeholder="650">
+      </div>
+
+      <div>
+        <label>Old Price</label>
+        <input id="old_price" type="number" placeholder="800">
+      </div>
+
+      <div>
+        <label>Emoji</label>
+        <input id="emoji" placeholder="👕">
+      </div>
+
+    </div>
+
+    <button class="primary" onclick="saveProduct()">
+      Save Product
+    </button>
+
+    <button class="secondary" onclick="clearForm()">
+      Clear
+    </button>
+
+    <div id="message"></div>
+
+  </div>
+
+
+  <!-- PRODUCTS -->
+  <div class="products">
+
+    <h2>📦 Products</h2>
+
+    <div id="productsList">
+      Loading...
+    </div>
+
+  </div>
+
+</div>
+
+
+<script>
+
+const SUPABASE_URL =
+"https://uihkyyxxadlybybkrxza.supabase.co";
+
+const SUPABASE_KEY =
+"sb_publishable_kIPiXagD0szi3ulESGW-sQ_4oJ2YgK2";
+
+const supabaseClient =
+supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+
+// =============================
+// LOGIN
+// =============================
+
+async function login() {
+
+  const email =
+    document.getElementById("email").value.trim();
+
+  const password =
+    document.getElementById("password").value;
+
+  const msg =
+    document.getElementById("loginMessage");
+
+  if (!email || !password) {
+    msg.innerHTML =
+      '<div class="message">Email and password required.</div>';
+    return;
+  }
+
+  const { data, error } =
+    await supabaseClient.auth.signInWithPassword({
+      email,
+      password
+    });
+
+  if (error) {
+
+    msg.innerHTML =
+      '<div class="message">❌ ' +
+      error.message +
+      '</div>';
+
+    return;
+  }
+
+  showAdmin();
+
+}
+
+
+// =============================
+// LOGOUT
+// =============================
+
+async function logout() {
+
+  await supabaseClient.auth.signOut();
+
+  document.getElementById("adminPanel").style.display = "none";
+  document.getElementById("loginBox").style.display = "block";
+
+}
+
+
+// =============================
+// CHECK LOGIN
+// =============================
+
+async function checkUser() {
+
+  const {
+    data: { session }
+  } = await supabaseClient.auth.getSession();
+
+  if (session) {
+    showAdmin();
+  }
+
+}
+
+
+// =============================
+// SHOW ADMIN
+// =============================
+
+function showAdmin() {
+
+  document.getElementById("loginBox").style.display = "none";
+
+  document.getElementById("adminPanel").style.display = "block";
+
+  loadProducts();
+
+}
+
+
+// =============================
+// LOAD PRODUCTS
+// =============================
+
+async function loadProducts() {
+
+  const list =
+    document.getElementById("productsList");
+
+  list.innerHTML = "Loading...";
+
+  const {
+    data,
+    error
+  } = await supabaseClient
+    .from("products")
+    .select("*")
+    .order("id", { ascending: false });
+
+  if (error) {
+
+    list.innerHTML =
+      '<div class="message">❌ ' +
+      error.message +
+      '</div>';
+
+    return;
+  }
+
+  if (!data || data.length === 0) {
+
+    list.innerHTML =
+      '<div class="message">No products found.</div>';
+
+    return;
+  }
+
+  list.innerHTML = "";
+
+  data.forEach(product => {
+
+    const div =
+      document.createElement("div");
+
+    div.className = "product";
+
+    div.innerHTML = `
+
+      <div class="product-info">
+
+        <h3>
+          ${product.emoji || "🛍️"}
+          ${escapeHtml(product.name)}
+        </h3>
+
+        <p>
+          Category:
+          ${escapeHtml(product.category || "")}
+        </p>
+
+        <p>
+          Price:
+          ৳${product.price}
+          ${
+            product.old_price
+              ? `<del> ৳${product.old_price}</del>`
+              : ""
+          }
+        </p>
+
+      </div>
+
+      <div class="actions">
+
+        <button
+          class="secondary"
+          onclick='editProduct(${JSON.stringify(product)})'>
+          ✏️ Edit
+        </button>
+
+        <button
+          class="danger"
+          onclick="deleteProduct('${product.id}')">
+          🗑️ Delete
+        </button>
+
+      </div>
+
+    `;
+
+    list.appendChild(div);
+
+  });
+
+}
+
+
+// =============================
+// SAVE PRODUCT
+// =============================
+
+async function saveProduct() {
+
+  const id =
+    document.getElementById("productId").value;
+
+  const name =
+    document.getElementById("name").value.trim();
+
+  const category =
+    document.getElementById("category").value;
+
+  const price =
+    Number(document.getElementById("price").value);
+
+  const old_price =
+    Number(document.getElementById("old_price").value) || null;
+
+  const emoji =
+    document.getElementById("emoji").value.trim();
+
+  const msg =
+    document.getElementById("message");
+
+
+  if (!name || !price) {
+
+    msg.innerHTML =
+      '<div class="message">❌ Product name and price are required.</div>';
+
+    return;
+  }
+
+
+  let result;
+
+
+  if (id) {
+
+    result =
+      await supabaseClient
+        .from("products")
+        .update({
+          name,
+          category,
+          price,
+          old_price,
+          emoji
+        })
+        .eq("id", id);
+
+  } else {
+
+    result =
+      await supabaseClient
+        .from("products")
+        .insert([{
+          name,
+          category,
+          price,
+          old_price,
+          emoji
+        }]);
+
+  }
+
+
+  if (result.error) {
+
+    msg.innerHTML =
+      '<div class="message">❌ ' +
+      result.error.message +
+      '</div>';
+
+    return;
+  }
+
+
+  msg.innerHTML =
+    '<div class="message">✅ Product saved successfully!</div>';
+
+  clearForm();
+
+  loadProducts();
+
+}
+
+
+// =============================
+// EDIT PRODUCT
+// =============================
+
+function editProduct(product) {
+
+  document.getElementById("formTitle").innerText =
+    "✏️ Edit Product";
+
+  document.getElementById("productId").value =
+    product.id;
+
+  document.getElementById("name").value =
+    product.name || "";
+
+  document.getElementById("category").value =
+    product.category || "Other";
+
+  document.getElementById("price").value =
+    product.price || "";
+
+  document.getElementById("old_price").value =
+    product.old_price || "";
+
+  document.getElementById("emoji").value =
+    product.emoji || "";
+
+  window.scrollTo({
+    top: 0,
+    behavior: "smooth"
+  });
+
+}
+
+
+// =============================
+// DELETE PRODUCT
+// =============================
+
+async function deleteProduct(id) {
+
+  if (!confirm("Are you sure you want to delete this product?")) {
+    return;
+  }
+
+  const { error } =
+    await supabaseClient
+      .from("products")
+      .delete()
+      .eq("id", id);
+
+  if (error) {
+
+    alert("❌ " + error.message);
+    return;
+
+  }
+
+  loadProducts();
+
+}
+
+
+// =============================
+// CLEAR FORM
+// =============================
+
+function clearForm() {
+
+  document.getElementById("productId").value = "";
+
+  document.getElementById("name").value = "";
+
+  document.getElementById("price").value = "";
+
+  document.getElementById("old_price").value = "";
+
+  document.getElementById("emoji").value = "";
+
+  document.getElementById("formTitle").innerText =
+    "➕ Add Product";
+
+}
+
+
+// =============================
+// HTML SECURITY
+// =============================
+
+function escapeHtml(text) {
+
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+
+}
+
+
+// START
+checkUser();
+
+</script>
+
+</body>
+</html>
